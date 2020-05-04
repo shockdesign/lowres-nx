@@ -41,7 +41,7 @@
 #include <string.h>
 
 const char *defaultDisk = "Disk.nx";
-const int defaultWindowScale = 4;
+const int defaultWindowScale = 1; // 4;
 const int joyAxisThreshold = 16384;
 const int bootIntroStateAddress = 0xA000;
 
@@ -97,17 +97,17 @@ int screenshotRequestedWithScale = 0;
 int main(int argc, const char * argv[])
 {
     memset(&coreInput, 0, sizeof(struct CoreInput));
-    
+
     settings_init(&settings, mainProgramFilename, argc, argv);
     runner_init(&runner);
 #if DEV_MENU
     dev_init(&devMenu, &runner, &settings);
 #endif
-    
+
     if (runner_isOkay(&runner))
     {
         SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK);
-        
+
         SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
         SDL_Event event;
         while (SDL_PollEvent(&event))
@@ -121,19 +121,19 @@ int main(int argc, const char * argv[])
                 }
             }
         }
-        
+
         Uint32 windowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
         if (settings.session.fullscreen)
         {
             windowFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
         }
-        
+
         const char *windowTitle = "LowRes NX";
-        
+
         window = SDL_CreateWindow(windowTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH * defaultWindowScale, SCREEN_HEIGHT * defaultWindowScale, windowFlags);
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
-        
+
         SDL_AudioSpec desiredAudioSpec = {
             .freq = 44100,
             .format = AUDIO_S16,
@@ -141,16 +141,16 @@ int main(int argc, const char * argv[])
 #ifdef __EMSCRIPTEN__
             .samples = 2048, // sample FRAMES
 #else
-            .samples = 1470, // sample FRAMES
+            .samples = 1470, // sample FRAMES (have a look at this, test says 2048)
 #endif
             .userdata = runner.core,
             .callback = audioCallback
         };
-        
+
         audioDevice = SDL_OpenAudioDevice(NULL, 0, &desiredAudioSpec, &audioSpec, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
-        
+
         configureJoysticks();
-        
+
         bootNX();
         if (mainProgramFilename[0] != 0)
         {
@@ -158,16 +158,16 @@ int main(int argc, const char * argv[])
         }
 
         updateScreenRect(SCREEN_WIDTH * defaultWindowScale, SCREEN_HEIGHT * defaultWindowScale);
-        
+
 #ifdef __EMSCRIPTEN__
         emscripten_set_main_loop_arg(update, NULL, -1, true);
 #else
         while (!quit)
         {
             Uint32 ticks = SDL_GetTicks();
-            
+
             update(NULL);
-            
+
             // limit to 60 FPS
             Uint32 ticksDelta = SDL_GetTicks() - ticks;
             if (ticksDelta < 16)
@@ -175,36 +175,36 @@ int main(int argc, const char * argv[])
                 SDL_Delay(16 - ticksDelta);
             }
         }
-        
+
         core_willSuspendProgram(runner.core);
 #endif
     }
-    
+
     closeJoysticks();
-    
+
     SDL_CloseAudioDevice(audioDevice);
-    
+
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
-    
+
     SDL_Quit();
-    
+
     runner_deinit(&runner);
-    
+
     return 0;
 }
 
 void bootNX()
 {
     mainState = MainStateBootIntro;
-    
+
     struct CoreError error = core_compileProgram(runner.core, bootIntroSourceCode);
     if (error.code != ErrorNone)
     {
         core_traceError(runner.core, error);
     }
-    
+
     runner.core->interpreter->debug = false;
     core_willRunProgram(runner.core, SDL_GetTicks() / 1000);
 }
@@ -212,7 +212,7 @@ void bootNX()
 void rebootNX()
 {
     core_willSuspendProgram(runner.core);
-    
+
     mainProgramFilename[0] = 0;
     bootNX();
 }
@@ -243,7 +243,7 @@ void selectProgram(const char *filename)
 void runMainProgram()
 {
     core_willSuspendProgram(runner.core);
-    
+
     struct CoreError error = runner_loadProgram(&runner, mainProgramFilename);
 #if DEV_MENU
     devMenu.lastError = error;
@@ -266,7 +266,7 @@ void runMainProgram()
 void runToolProgram(const char *filename)
 {
     core_willSuspendProgram(runner.core);
-    
+
     struct CoreError error = runner_loadProgram(&runner, filename);
     if (error.code == ErrorNone)
     {
@@ -284,7 +284,7 @@ void showDevMenu()
 {
 #if DEV_MENU
     core_willSuspendProgram(runner.core);
-    
+
     bool reload = (mainState == MainStateRunningTool);
     mainState = MainStateDevMenu;
     dev_show(&devMenu, reload);
@@ -325,7 +325,7 @@ void getRamFilename(char *outputString)
     if (prefPath)
     {
         strncpy(outputString, prefPath, FILENAME_MAX - 1);
-        
+
         char *separator = strrchr(mainProgramFilename, PATH_SEPARATOR_CHAR);
         if (separator)
         {
@@ -336,14 +336,14 @@ void getRamFilename(char *outputString)
         {
             strncat(outputString, mainProgramFilename, FILENAME_MAX - 1);
         }
-        
+
         char *postfix = strrchr(outputString, '.');
         if (postfix)
         {
             *postfix = 0;
         }
         strncat(outputString, ".dat", FILENAME_MAX - 1);
-        
+
     } else {
         outputString[0] = 0;
     }
@@ -372,13 +372,13 @@ void update(void *arg)
     SDL_Event event;
     bool hasInput = false;
     bool forceRender = false;
-    
+
     if (releasedTouch)
     {
         coreInput.touch = false;
         releasedTouch = false;
     }
-    
+
     while (SDL_PollEvent(&event))
     {
         switch (event.type)
@@ -386,7 +386,7 @@ void update(void *arg)
             case SDL_QUIT:
                 quit = true;
                 break;
-                
+
             case SDL_WINDOWEVENT:
                 switch (event.window.event)
                 {
@@ -397,7 +397,7 @@ void update(void *arg)
                     }
                 }
                 break;
-            
+
             case SDL_DROPFILE: {
                 if (hasPostfix(event.drop.file, ".nx") || hasPostfix(event.drop.file, ".NX"))
                 {
@@ -419,16 +419,16 @@ void update(void *arg)
                 SDL_free(event.drop.file);
                 break;
             }
-            
+
             case SDL_KEYDOWN: {
                 SDL_Keycode keycode = event.key.keysym.sym;
                 SDL_Scancode scancode = event.key.keysym.scancode;
-                
+
                 if (event.key.keysym.mod == 0)
                 {
                     hasInput = true;
                 }
-                
+
                 // text input
                 if (keycode == SDLK_RETURN)
                 {
@@ -454,13 +454,13 @@ void update(void *arg)
                 {
                     coreInput.key = CoreInputKeyRight;
                 }
-                
+
                 // console buttons
                 if (keycode == SDLK_RETURN || keycode == SDLK_p)
                 {
                     coreInput.pause = true;
                 }
-                
+
 #if HOT_KEYS
                 // system
                 if (event.key.keysym.mod & KMOD_CTRL)
@@ -527,7 +527,7 @@ void update(void *arg)
 #endif
                 break;
             }
-                
+
             case SDL_TEXTINPUT: {
                 char key = event.text.text[0];
                 hasInput = true;
@@ -541,30 +541,30 @@ void update(void *arg)
                 }
                 break;
             }
-            
+
             case SDL_MOUSEBUTTONDOWN: {
                 hasInput = true;
                 setTouchPosition(event.button.x, event.button.y);
                 coreInput.touch = true;
                 break;
             }
-                
+
             case SDL_MOUSEBUTTONUP: {
                 releasedTouch = true;
                 break;
             }
-                
+
             case SDL_MOUSEMOTION: {
                 setTouchPosition(event.motion.x, event.motion.y);
                 break;
             }
-                
+
             case SDL_JOYDEVICEADDED:
             case SDL_JOYDEVICEREMOVED: {
                 configureJoysticks();
                 break;
             }
-                
+
             case SDL_JOYBUTTONDOWN: {
                 hasInput = true;
                 if (event.jbutton.button == 2)
@@ -575,7 +575,7 @@ void update(void *arg)
             }
         }
     }
-    
+
     const Uint8 *state = SDL_GetKeyboardState(NULL);
     for (int i = 0; i < 2; i++)
     {
@@ -604,12 +604,12 @@ void update(void *arg)
             gamepad->buttonB = state[keyboardControls[ci][5]] || state[keyboardControls[ci][7]];
         }
     }
-    
+
     switch (mainState)
     {
         case MainStateUndefined:
             break;
-            
+
         case MainStateBootIntro:
             if (hasInput && !hasProgram())
             {
@@ -627,7 +627,7 @@ void update(void *arg)
 #endif
             }
             break;
-            
+
         case MainStateRunningProgram:
         case MainStateRunningTool:
             core_update(runner.core, &coreInput);
@@ -671,41 +671,41 @@ void update(void *arg)
                 }
             }
             break;
-            
+
         case MainStateDevMenu:
 #if DEV_MENU
             dev_update(&devMenu, &coreInput);
 #endif
             break;
     }
-    
+
     hasUsedInputLastUpdate = coreInput.out_hasUsedInput;
-    
+
     if (!audioStarted && audioDevice)
     {
         audioStarted = true;
         SDL_PauseAudioDevice(audioDevice, 0);
     }
-    
+
     if (core_shouldRender(runner.core) || forceRender)
     {
         SDL_RenderClear(renderer);
-        
+
         void *pixels = NULL;
         int pitch = 0;
         SDL_LockTexture(texture, NULL, &pixels, &pitch);
-        
+
         video_renderScreen(runner.core, pixels);
-        
+
         if (screenshotRequestedWithScale > 0)
         {
             saveScreenshot(pixels, screenshotRequestedWithScale);
             screenshotRequestedWithScale = 0;
         }
-        
+
         SDL_UnlockTexture(texture);
         SDL_RenderCopy(renderer, texture, NULL, &screenRect);
-        
+
         SDL_RenderPresent(renderer);
     }
 }

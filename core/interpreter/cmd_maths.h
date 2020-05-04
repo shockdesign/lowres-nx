@@ -23,6 +23,10 @@
 #include <stdio.h>
 #include "value.h"
 
+#ifdef __POCKET_CHIP__
+#define M_PI 3.14159265358979323846
+#endif
+
 struct Core;
 
 struct TypedValue fnc_math0(struct Core *core);
